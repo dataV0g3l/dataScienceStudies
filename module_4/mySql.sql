@@ -198,3 +198,44 @@ WHERE dst_project.flights.flight_id in
 )
 GROUP BY fare_conditions
 
+-- Dataset all values
+SELECT *, (total_seats_number - total_tickets) as not_sold
+FROM (
+    SELECT COUNT(*) AS total_seats_number, dst_project.aircrafts.aircraft_code
+    FROM dst_project.aircrafts
+    INNER JOIN "dst_project"."seats" ON "dst_project"."aircrafts"."aircraft_code" = "dst_project"."seats"."aircraft_code"
+    WHERE "dst_project"."aircrafts"."aircraft_code" IN 
+    (
+        SELECT aircraft_code
+        FROM dst_project.flights
+        WHERE departure_airport = 'AAQ'
+    )
+    GROUP BY "dst_project"."aircrafts"."aircraft_code"
+) seats_per_model
+RIGHT JOIN 
+(
+    SELECT *, (actual_arrival - actual_departure) as flight_time
+    FROM dst_project.flights
+    WHERE departure_airport = 'AAQ'
+        AND (date_trunc('month', scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
+        AND status not in ('Cancelled')
+) anapa_flights
+ON (seats_per_model.aircraft_code = anapa_flights.aircraft_code)
+INNER JOIN
+(
+    -- Tickets sold and profit gained
+    SELECT COUNT(ticket_no) as total_tickets, SUM(amount) AS total_sum, dst_project.ticket_flights.flight_id
+    FROM dst_project.ticket_flights
+    INNER JOIN dst_project.flights ON dst_project.flights.flight_id = dst_project.ticket_flights.flight_id
+    INNER JOIN dst_project.aircrafts ON dst_project.aircrafts.aircraft_code = dst_project.flights.aircraft_code
+    WHERE dst_project.flights.flight_id in 
+    (
+        SELECT flight_id
+        FROM dst_project.flights
+        WHERE departure_airport = 'AAQ'
+            AND (date_trunc('month', scheduled_departure) in ('2017-01-01','2017-02-01', '2017-12-01'))
+            AND status not in ('Cancelled')
+    )
+    GROUP BY dst_project.ticket_flights.flight_id
+) tickets_data
+ON anapa_flights.flight_id = tickets_data.flight_id
